@@ -1,9 +1,18 @@
 import { useState } from 'react'
-import { Music2, Users, MessageCircle } from 'lucide-react'
+import { Music2, MessageCircle } from 'lucide-react'
 import { measureNoise, type NoiseSnapshot } from '../lib/noiseDetector'
 import { supabase } from '../lib/supabase'
 import type { Room } from '../types/database'
 import type { User } from '@supabase/supabase-js'
+
+const CROWD_OPTIONS = [
+  { value: '', label: 'How crowded?' },
+  { value: 'empty', label: 'Empty' },
+  { value: 'lots_of_space', label: 'A lot of space' },
+  { value: 'some_space', label: 'Some space' },
+  { value: 'crowded', label: 'Crowded' },
+  { value: 'no_space', label: 'No space at all' },
+] as const
 
 interface Props {
   rooms: Room[]
@@ -16,7 +25,7 @@ export function ScanScreen({ rooms, user, onSubmitted, onSignInClick }: Props) {
   const [scanning, setScanning] = useState(false)
   const [snapshot, setSnapshot] = useState<NoiseSnapshot | null>(null)
   const [selectedRoomId, setSelectedRoomId] = useState<string>('')
-  const [peopleCount, setPeopleCount] = useState(0)
+  const [crowdLevel, setCrowdLevel] = useState<string>('')
   const [yappersCount, setYappersCount] = useState(0)
   const [hasMusic, setHasMusic] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -50,13 +59,14 @@ export function ScanScreen({ rooms, user, onSubmitted, onSignInClick }: Props) {
         user_id: user.id,
         avg_noise: snapshot?.rms ?? null,
         noise_label: snapshot?.label ?? null,
-        people_count: peopleCount,
+        people_count: 0,
+        crowd_level: crowdLevel || null,
         yappers_count: yappersCount,
         has_music: hasMusic,
       })
       if (err) throw new Error(err.message)
       setSnapshot(null)
-      setPeopleCount(0)
+      setCrowdLevel('')
       setYappersCount(0)
       setHasMusic(false)
       onSubmitted()
@@ -67,10 +77,14 @@ export function ScanScreen({ rooms, user, onSubmitted, onSignInClick }: Props) {
     }
   }
 
+  const roomsList = rooms.filter((r) => (r as { spot_type?: string }).spot_type !== 'cafe')
+  const cafesList = rooms.filter((r) => (r as { spot_type?: string }).spot_type === 'cafe')
+  const allSpots = [...roomsList, ...cafesList]
+
   if (!user) {
     return (
       <div className="auth-required">
-        <p>Sign in to report room status and help other students find the best spots.</p>
+        <p>Sign in to report status and help others find the best places.</p>
         <button type="button" className="submit-button" onClick={onSignInClick}>
           Sign in to continue
         </button>
@@ -93,36 +107,50 @@ export function ScanScreen({ rooms, user, onSubmitted, onSignInClick }: Props) {
       )}
 
       {error && (
-        <p style={{ color: '#f87171', marginTop: '1rem' }}>{error}</p>
+        <p className="scan-error">{error}</p>
       )}
 
-      {rooms.length > 0 && (
+      {allSpots.length > 0 && (
         <div className="scan-form">
           <select
             className="room-select"
             value={selectedRoomId}
             onChange={(e) => setSelectedRoomId(e.target.value)}
           >
-            <option value="">Select room</option>
-            {rooms.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.building ? `[${r.building}] ` : ''}{r.name}
-              </option>
-            ))}
+            <option value="">Select a place</option>
+            {roomsList.length > 0 && (
+              <optgroup label="Buildings">
+                {roomsList.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.building ? `[${r.building}] ` : ''}{r.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {cafesList.length > 0 && (
+              <optgroup label="Cafes">
+                {cafesList.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.building ? `[${r.building}] ` : ''}{r.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
 
           <div className="status-inputs">
-            <label className="status-label">
-              <Users size={16} />
-              <span>People</span>
-              <input
-                type="number"
-                min={0}
-                max={200}
-                value={peopleCount || ''}
-                onChange={(e) => setPeopleCount(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                placeholder="0"
-              />
+            <label className="status-label status-select">
+              <span>Crowd</span>
+              <select
+                value={crowdLevel}
+                onChange={(e) => setCrowdLevel(e.target.value)}
+              >
+                {CROWD_OPTIONS.map((o) => (
+                  <option key={o.value || 'blank'} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="status-label">
               <MessageCircle size={16} />
@@ -164,8 +192,8 @@ export function ScanScreen({ rooms, user, onSubmitted, onSignInClick }: Props) {
         </div>
       )}
 
-      {rooms.length === 0 && (
-        <p className="empty-hint">Add rooms first to submit status.</p>
+      {allSpots.length === 0 && (
+        <p className="empty-hint">Add places first to submit status.</p>
       )}
     </div>
   )

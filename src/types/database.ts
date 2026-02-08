@@ -4,9 +4,15 @@ export interface Database {
   public: {
     Tables: {
       rooms: {
-        Row: { id: string; name: string; description: string; building?: string; created_at: string }
-        Insert: { id?: string; name: string; description?: string; building?: string }
+        Row: { id: string; name: string; description: string; building?: string; spot_type?: string; latitude?: number | null; longitude?: number | null; created_at: string }
+        Insert: { id?: string; name: string; description?: string; building?: string; spot_type?: string; latitude?: number | null; longitude?: number | null }
         Update: Partial<{ name: string; description: string; building: string }>
+        Relationships: []
+      }
+      profiles: {
+        Row: { id: string; user_id: string; username: string; created_at: string }
+        Insert: { user_id: string; username: string }
+        Update: Partial<{ username: string }>
         Relationships: []
       }
       room_status: {
@@ -17,6 +23,7 @@ export interface Database {
           avg_noise: number | null
           noise_label: string | null
           people_count: number
+          crowd_level: string | null
           yappers_count: number
           has_music: boolean
           created_at: string
@@ -27,6 +34,7 @@ export interface Database {
           avg_noise?: number | null
           noise_label?: string | null
           people_count?: number
+          crowd_level?: string | null
           yappers_count?: number
           has_music?: boolean
         }
@@ -63,5 +71,6 @@ export interface Database {
 }
 
 export type Room = Database['public']['Tables']['rooms']['Row']
+export type Profile = Database['public']['Tables']['profiles']['Row']
 export type RoomStatus = Database['public']['Tables']['room_status']['Row']
 export type { User }

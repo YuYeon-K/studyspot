@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Home, Mic, PlusCircle, LogIn } from 'lucide-react'
+import { Home, Map, Mic, PlusCircle, LogIn } from 'lucide-react'
 import { RoomList } from './components/RoomList'
+import { PlacesMap } from './components/PlacesMap'
 import { ScanScreen } from './components/ScanScreen'
 import { AddRoomForm } from './components/AddRoomForm'
 import { AuthScreen } from './components/AuthScreen'
@@ -9,29 +10,41 @@ import type { Room } from './types/database'
 import type { User } from '@supabase/supabase-js'
 import './App.css'
 
-type Tab = 'rooms' | 'scan' | 'add'
+type Tab = 'places' | 'map' | 'scan' | 'add'
 
-const UW_BUILDINGS = ['DC', 'MC', 'SLC', 'DP', 'E7', 'E5', 'E3', 'HH', 'QNC', 'RCH', 'Other'] as const
+const UW_LOCATIONS = ['DC', 'MC', 'SLC', 'DP', 'E7', 'E5', 'E3', 'HH', 'QNC', 'RCH', 'Plaza', 'Other'] as const
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL ?? ''
 const needsSetup = !supabaseUrl || supabaseUrl.includes('your-project')
 
 function App() {
   const [user, setUser] = useState<User | null>(null)
+  const [profile, setProfile] = useState<{ username: string } | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [showAuth, setShowAuth] = useState(false)
-  const [tab, setTab] = useState<Tab>('rooms')
+  const [tab, setTab] = useState<Tab>('places')
   const [rooms, setRooms] = useState<Room[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const fetchProfile = async (uid: string) => {
+    const { data } = await supabase.from('profiles').select('username').eq('user_id', uid).maybeSingle()
+    const p = data as { username: string } | null
+    setProfile(p ? { username: p.username } : null)
+  }
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
+      const u = session?.user ?? null
+      setUser(u)
+      if (u) fetchProfile(u.id)
       setAuthLoading(false)
     })
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
-      setUser(session?.user ?? null)
+      const u = session?.user ?? null
+      setUser(u)
+      if (u) fetchProfile(u.id)
+      else setProfile(null)
     })
     return () => subscription.unsubscribe()
   }, [])
@@ -79,7 +92,12 @@ function App() {
         <h1 className="app-title">UWaterloo Study Spot</h1>
         <div className="app-header-actions">
           {!authLoading && user ? (
-            <AuthScreen user={user} onAuthChange={() => setShowAuth(false)} />
+            <AuthScreen
+              user={user}
+              profile={profile}
+              onAuthChange={() => setShowAuth(false)}
+              onProfileChange={() => user && fetchProfile(user.id)}
+            />
           ) : !authLoading ? (
             <button
               type="button"
@@ -97,7 +115,12 @@ function App() {
       {showAuth && !user && (
         <div className="auth-overlay" onClick={() => setShowAuth(false)}>
           <div className="auth-modal" onClick={(e) => e.stopPropagation()}>
-            <AuthScreen user={null} onAuthChange={() => setShowAuth(false)} />
+            <AuthScreen
+              user={null}
+              profile={null}
+              onAuthChange={() => setShowAuth(false)}
+              onProfileChange={() => {}}
+            />
             <button type="button" className="auth-close" onClick={() => setShowAuth(false)}>
               ×
             </button>
@@ -107,11 +130,18 @@ function App() {
 
       <nav className="nav-tabs">
         <button
-          className={tab === 'rooms' ? 'active' : ''}
-          onClick={() => setTab('rooms')}
+          className={tab === 'places' ? 'active' : ''}
+          onClick={() => setTab('places')}
         >
           <Home size={16} style={{ verticalAlign: 'middle', marginRight: 6 }} />
-          Rooms
+          Places
+        </button>
+        <button
+          className={tab === 'map' ? 'active' : ''}
+          onClick={() => setTab('map')}
+        >
+          <Map size={16} style={{ verticalAlign: 'middle', marginRight: 6 }} />
+          Map
         </button>
         <button
           className={tab === 'scan' ? 'active' : ''}
@@ -125,12 +155,12 @@ function App() {
           onClick={() => setTab('add')}
         >
           <PlusCircle size={16} style={{ verticalAlign: 'middle', marginRight: 6 }} />
-          Add Room
+          Add Place
         </button>
       </nav>
 
       {error && (
-        <div style={{ padding: '1rem', background: 'rgba(239,68,68,0.15)', color: '#f87171', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.875rem' }}>
+        <div className="app-error-banner">
           {error}
           {(error.toLowerCase().includes('fetch') || error.includes('Invalid') || !import.meta.env.VITE_SUPABASE_URL) ? (
             <p style={{ margin: '0.5rem 0 0 0', opacity: 0.9 }}>
@@ -140,9 +170,10 @@ function App() {
         </div>
       )}
 
-      {tab === 'rooms' && (
+      {tab === 'places' && (
         <RoomList rooms={rooms} loading={loading} onRefresh={fetchRooms} />
       )}
+      {tab === 'map' && <PlacesMap places={rooms} />}
       {tab === 'scan' && (
         <ScanScreen
           rooms={rooms}
@@ -154,7 +185,7 @@ function App() {
       {tab === 'add' && (
         <AddRoomForm
           user={user}
-          buildings={UW_BUILDINGS}
+          locations={UW_LOCATIONS}
           onAdded={fetchRooms}
           onSignInClick={() => setShowAuth(true)}
         />
