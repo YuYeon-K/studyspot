@@ -18,15 +18,20 @@ alter table public.rooms add column if not exists spot_type text default 'room';
 alter table public.rooms add column if not exists latitude float8;
 alter table public.rooms add column if not exists longitude float8;
 
--- Profiles: username for display (privacy - no email shown)
+-- Profiles: username for display, email for login lookup, is_admin for place deletion
 create table if not exists public.profiles (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users(id) on delete cascade not null unique,
   username text not null,
+  email text,
+  is_admin boolean default false,
   created_at timestamptz default now()
 );
 
+alter table public.profiles add column if not exists email text;
+alter table public.profiles add column if not exists is_admin boolean default false;
 create index if not exists idx_profiles_user_id on public.profiles(user_id);
+create index if not exists idx_profiles_username on public.profiles(username);
 
 alter table public.profiles enable row level security;
 
@@ -42,10 +47,11 @@ create policy "Users can update own profile" on public.profiles for update using
 create or replace function public.handle_new_user()
 returns trigger as $$
 begin
-  insert into public.profiles (user_id, username)
+  insert into public.profiles (user_id, username, email)
   values (
     new.id,
-    coalesce(nullif(trim(new.raw_user_meta_data->>'username'), ''), 'user_' || substr(new.id::text, 1, 8))
+    coalesce(nullif(trim(new.raw_user_meta_data->>'username'), ''), 'user_' || substr(new.id::text, 1, 8)),
+    new.email
   );
   return new;
 end;
@@ -87,14 +93,26 @@ alter table public.room_status enable row level security;
 
 drop policy if exists "Allow all on rooms" on public.rooms;
 drop policy if exists "Anyone can read rooms" on public.rooms;
+drop policy if exists "Admin can delete rooms" on public.rooms;
+drop policy if exists "Admin can update rooms" on public.rooms;
+drop policy if exists "Authenticated can update rooms" on public.rooms;
 drop policy if exists "Anyone can read room_status" on public.room_status;
 drop policy if exists "Authenticated can insert room_status" on public.room_status;
 drop policy if exists "Authenticated can insert rooms" on public.rooms;
 
 create policy "Anyone can read rooms" on public.rooms for select using (true);
 create policy "Authenticated can insert rooms" on public.rooms for insert with check (auth.role() = 'authenticated');
+create policy "Admin can delete rooms" on public.rooms for delete using (
+  exists (select 1 from public.profiles where user_id = auth.uid() and is_admin = true)
+);
+create policy "Authenticated can update rooms" on public.rooms for update using (
+  auth.role() = 'authenticated'
+);
 create policy "Anyone can read room_status" on public.room_status for select using (true);
 create policy "Authenticated can insert room_status" on public.room_status for insert with check (auth.uid() = user_id);
+
+-- Make yourself admin (run after schema, replace with your user_id or email):
+-- update public.profiles set is_admin = true where email = 'your@email.com';
 
 -- Enable email auth in Supabase Dashboard: Authentication > Providers > Email
 -- Optional: Enable Google OAuth for @uwaterloo.ca

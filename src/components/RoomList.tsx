@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
-import { RefreshCw, MessageCircle, Music2 } from 'lucide-react'
+import { RefreshCw, MessageCircle, Music2, Trash2, ChevronRight, ArrowLeft, BarChart2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { ReportStatusModal } from './ReportStatusModal'
 import type { Room } from '../types/database'
+import type { User } from '@supabase/supabase-js'
 
 const CROWD_LABELS: Record<string, string> = {
   empty: 'Empty',
@@ -41,14 +43,26 @@ interface Props {
   rooms: Room[]
   loading: boolean
   onRefresh: () => void
+  isAdmin?: boolean
+  canReport?: boolean
+  user?: User | null
 }
 
 type ViewMode = 'buildings' | 'cafes'
 
-export function RoomList({ rooms, loading, onRefresh }: Props) {
+export function RoomList({ rooms, loading, onRefresh, isAdmin, canReport = false, user }: Props) {
   const [roomData, setRoomData] = useState<RoomWithStatus[]>([])
   const [refreshing, setRefreshing] = useState(false)
   const [viewMode, setViewMode] = useState<ViewMode>('buildings')
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [reportingPlace, setReportingPlace] = useState<RoomWithStatus | null>(null)
+  const [selectedBuilding, setSelectedBuilding] = useState<string | null>(null)
+  const [selectedPlace, setSelectedPlace] = useState<RoomWithStatus | null>(null)
+
+  useEffect(() => {
+    setSelectedBuilding(null)
+    setSelectedPlace(null)
+  }, [viewMode])
 
   useEffect(() => {
     async function fetchStatus() {
@@ -140,8 +154,70 @@ export function RoomList({ rooms, loading, onRefresh }: Props) {
     setRefreshing(false)
   }
 
+  const handleDelete = async (id: string, name: string) => {
+    if (!isAdmin || !confirm(`Remove "${name}"? This cannot be undone.`)) return
+    setDeletingId(id)
+    try {
+      const { error } = await supabase.from('rooms').delete().eq('id', id)
+      if (error) throw error
+      await onRefresh()
+    } catch {
+      // Silently fail - admin might have lost permission
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   const roomsList = roomData.filter((r) => (r as { spot_type?: string }).spot_type !== 'cafe')
   const cafesList = roomData.filter((r) => (r as { spot_type?: string }).spot_type === 'cafe')
+
+  const BUILDING_ORDER: Record<string, number> = {
+    DC: 0,
+    MC: 1,
+    SLC: 2,
+    DP: 3,
+    E7: 4,
+    Plaza: 5,
+  }
+
+  function groupByBuilding(list: RoomWithStatus[]): [string, RoomWithStatus[]][] {
+    const map = new Map<string, RoomWithStatus[]>()
+    for (const r of list) {
+      const b = r.building?.trim() || 'Other'
+      const arr = map.get(b) ?? []
+      arr.push(r)
+      map.set(b, arr)
+    }
+    const entries = [...map.entries()]
+    entries.sort((a, b) => {
+      const oa = BUILDING_ORDER[a[0]] ?? 99
+      const ob = BUILDING_ORDER[b[0]] ?? 99
+      if (oa !== ob) return oa - ob
+      return a[0].localeCompare(b[0])
+    })
+    return entries
+  }
+
+  const goIntoBuilding = (building: string) => {
+    setSelectedBuilding(building)
+    setSelectedPlace(null)
+  }
+
+  const goIntoPlace = (spot: RoomWithStatus) => {
+    setSelectedPlace(spot)
+  }
+
+  const goBack = () => {
+    if (viewMode === 'cafes') {
+      setSelectedPlace(null)
+    } else if (selectedPlace) {
+      setSelectedPlace(null)
+    } else if (selectedBuilding) {
+      setSelectedBuilding(null)
+    }
+  }
+
+  const canGoBack = viewMode === 'cafes' ? selectedPlace !== null : selectedBuilding !== null
 
   if (loading) {
     return <div className="empty-state">Loading spots...</div>
@@ -156,11 +232,35 @@ export function RoomList({ rooms, loading, onRefresh }: Props) {
     )
   }
 
-  const renderCard = (spot: RoomWithStatus) => (
+  const accentColor = (i: number) => `color-${(i % 5) + 1}` as const
+
+  const renderPlaceRow = (spot: RoomWithStatus, onClick: () => void, idx: number) => (
+    <button
+      key={spot.id}
+      type="button"
+      className="place-row inline"
+      onClick={onClick}
+    >
+      <span className={`place-row-tab ${accentColor(idx)}`} aria-hidden />
+      <div className="place-row-body">
+        <span className="place-row-name">{spot.name}</span>
+        {spot.status?.noiseLabel && (
+          <span className={badgeClass(spot.status.noiseLabel)}>{spot.status.noiseLabel}</span>
+        )}
+        <ChevronRight size={18} className="place-row-chevron" />
+      </div>
+    </button>
+  )
+
+  const renderCard = (spot: RoomWithStatus, hideBuilding?: boolean) => {
+    const accentClass = spot.status?.noiseLabel?.toLowerCase() ?? 'moderate'
+    return (
     <div key={spot.id} className="room-card">
+      <span className={`room-card-accent ${accentClass}`} aria-hidden />
       <div className="room-card-info">
         <h3>
-          {spot.building && <span className="room-building">[{spot.building}]</span>} {spot.name}
+          {!hideBuilding && spot.building && <span className="room-building">[{spot.building}]</span>}{' '}
+          {spot.name}
         </h3>
         <p>{spot.description || 'No description'}</p>
         {spot.status && (
@@ -188,16 +288,48 @@ export function RoomList({ rooms, loading, onRefresh }: Props) {
           </div>
         )}
       </div>
-      {(!spot.status || !spot.status.noiseLabel) && (
-        <span className="room-badge moderate">No data</span>
-      )}
+      <div className="room-card-actions">
+        {(!spot.status || !spot.status.noiseLabel) && (
+          <span className="room-badge moderate">No data</span>
+        )}
+        {canReport && (
+          <button
+            type="button"
+            className="place-edit-btn"
+            onClick={() => setReportingPlace(spot)}
+            aria-label={`Report status for ${spot.name}`}
+          >
+            <BarChart2 size={16} />
+          </button>
+        )}
+        {isAdmin && (
+          <button
+            type="button"
+            className="place-delete-btn"
+            onClick={() => handleDelete(spot.id, spot.name)}
+            disabled={deletingId === spot.id}
+            aria-label={`Remove ${spot.name}`}
+          >
+            <Trash2 size={16} />
+          </button>
+        )}
+      </div>
     </div>
-  )
+  )}
 
   const currentList = viewMode === 'buildings' ? roomsList : cafesList
+  const grouped = groupByBuilding(currentList)
 
   return (
     <div>
+      {reportingPlace && user && (
+        <ReportStatusModal
+          place={reportingPlace}
+          user={user}
+          onSaved={onRefresh}
+          onClose={() => setReportingPlace(null)}
+        />
+      )}
       <div className="room-list-header">
         <div className="room-list-toggle">
           <button
@@ -236,9 +368,71 @@ export function RoomList({ rooms, loading, onRefresh }: Props) {
           <p>No cafes yet. Add one from the &quot;Add Place&quot; tab.</p>
         </div>
       )}
-      {currentList.length > 0 && (
-        <section className="spot-group">
-          {currentList.map(renderCard)}
+      {((viewMode === 'cafes' && cafesList.length > 0) || (viewMode === 'buildings' && grouped.length > 0)) && (
+        <section className="place-drilldown">
+          {canGoBack && (
+            <button type="button" className="drilldown-back" onClick={goBack}>
+              <ArrowLeft size={18} />
+              Back
+            </button>
+          )}
+
+          {viewMode === 'cafes' ? (
+            !selectedPlace ? (
+              <>
+                <h2 className="drilldown-section-title">Cafes</h2>
+                <div className="drilldown-list">
+                  {cafesList.map((spot, idx) =>
+                    renderPlaceRow(spot, () => goIntoPlace(spot), idx)
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="drilldown-detail">
+                {renderCard(selectedPlace, false)}
+              </div>
+            )
+          ) : (
+            <>
+              {!selectedBuilding && (
+                <>
+                  <h2 className="drilldown-section-title">Campus buildings</h2>
+                  <div className="drilldown-list grid">
+                    {grouped.map(([building, spots], idx) => (
+                      <button
+                        key={building}
+                        type="button"
+                        className="place-row building-row"
+                        onClick={() => goIntoBuilding(building)}
+                      >
+                        <span className={`place-row-tab ${accentColor(idx)}`} aria-hidden />
+                        <div className="place-row-body">
+                          <span className="place-row-name">{building}</span>
+                          <span className="place-row-count">{spots.length}</span>
+                          <ChevronRight size={18} className="place-row-chevron" />
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {selectedBuilding && !selectedPlace && (
+                <div className="drilldown-list">
+                  <h2 className="drilldown-title">{selectedBuilding}</h2>
+                  {(grouped.find(([b]) => b === selectedBuilding)?.[1] ?? []).map((spot, idx) =>
+                    renderPlaceRow(spot, () => goIntoPlace(spot), idx)
+                  )}
+                </div>
+              )}
+
+              {selectedPlace && (
+                <div className="drilldown-detail">
+                  {renderCard(selectedPlace, false)}
+                </div>
+              )}
+            </>
+          )}
         </section>
       )}
     </div>

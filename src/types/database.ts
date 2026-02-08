@@ -6,12 +6,12 @@ export interface Database {
       rooms: {
         Row: { id: string; name: string; description: string; building?: string; spot_type?: string; latitude?: number | null; longitude?: number | null; created_at: string }
         Insert: { id?: string; name: string; description?: string; building?: string; spot_type?: string; latitude?: number | null; longitude?: number | null }
-        Update: Partial<{ name: string; description: string; building: string }>
+        Update: Partial<{ name: string; description: string; building: string; spot_type: string; latitude: number | null; longitude: number | null }>
         Relationships: []
       }
       profiles: {
-        Row: { id: string; user_id: string; username: string; created_at: string }
-        Insert: { user_id: string; username: string }
+        Row: { id: string; user_id: string; username: string; email?: string | null; created_at: string }
+        Insert: { user_id: string; username: string; email?: string | null }
         Update: Partial<{ username: string }>
         Relationships: []
       }

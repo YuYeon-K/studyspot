@@ -19,7 +19,7 @@ const needsSetup = !supabaseUrl || supabaseUrl.includes('your-project')
 
 function App() {
   const [user, setUser] = useState<User | null>(null)
-  const [profile, setProfile] = useState<{ username: string } | null>(null)
+  const [profile, setProfile] = useState<{ username: string; is_admin?: boolean } | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [showAuth, setShowAuth] = useState(false)
   const [tab, setTab] = useState<Tab>('places')
@@ -28,9 +28,9 @@ function App() {
   const [error, setError] = useState<string | null>(null)
 
   const fetchProfile = async (uid: string) => {
-    const { data } = await supabase.from('profiles').select('username').eq('user_id', uid).maybeSingle()
-    const p = data as { username: string } | null
-    setProfile(p ? { username: p.username } : null)
+    const { data } = await supabase.from('profiles').select('username, is_admin').eq('user_id', uid).maybeSingle()
+    const p = data as { username: string; is_admin?: boolean } | null
+    setProfile(p ? { username: p.username, is_admin: p.is_admin ?? false } : null)
   }
 
   useEffect(() => {
@@ -132,30 +132,34 @@ function App() {
         <button
           className={tab === 'places' ? 'active' : ''}
           onClick={() => setTab('places')}
+          aria-label="Places"
         >
-          <Home size={16} style={{ verticalAlign: 'middle', marginRight: 6 }} />
-          Places
+          <Home size={22} />
+          <span>Places</span>
         </button>
         <button
           className={tab === 'map' ? 'active' : ''}
           onClick={() => setTab('map')}
+          aria-label="Map"
         >
-          <Map size={16} style={{ verticalAlign: 'middle', marginRight: 6 }} />
-          Map
+          <Map size={22} />
+          <span>Map</span>
         </button>
         <button
           className={tab === 'scan' ? 'active' : ''}
           onClick={() => setTab('scan')}
+          aria-label="Scan"
         >
-          <Mic size={16} style={{ verticalAlign: 'middle', marginRight: 6 }} />
-          Scan
+          <Mic size={22} />
+          <span>Scan</span>
         </button>
         <button
           className={tab === 'add' ? 'active' : ''}
           onClick={() => setTab('add')}
+          aria-label="Add place"
         >
-          <PlusCircle size={16} style={{ verticalAlign: 'middle', marginRight: 6 }} />
-          Add Place
+          <PlusCircle size={22} />
+          <span>Add</span>
         </button>
       </nav>
 
@@ -171,7 +175,14 @@ function App() {
       )}
 
       {tab === 'places' && (
-        <RoomList rooms={rooms} loading={loading} onRefresh={fetchRooms} />
+        <RoomList
+          rooms={rooms}
+          loading={loading}
+          onRefresh={fetchRooms}
+          isAdmin={profile?.is_admin ?? false}
+          canReport={!!user}
+          user={user}
+        />
       )}
       {tab === 'map' && <PlacesMap places={rooms} />}
       {tab === 'scan' && (
