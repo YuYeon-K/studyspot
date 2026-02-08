@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Eye, EyeOff } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { User } from '@supabase/supabase-js'
 
@@ -14,6 +15,7 @@ export function AuthScreen({ user, profile, onAuthChange, onProfileChange }: Pro
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [username, setUsername] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
@@ -32,7 +34,19 @@ export function AuthScreen({ user, profile, onAuthChange, onProfileChange }: Pro
         if (data.user) onProfileChange()
         setMessage({ type: 'success', text: 'Check your email to confirm!' })
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password })
+        let signInEmail = email.trim()
+        if (!signInEmail.includes('@')) {
+          const { data } = await supabase
+            .from('profiles')
+            .select('email')
+            .eq('username', signInEmail)
+            .maybeSingle() as { data: { email: string } | null }
+          if (!data?.email) {
+            throw new Error('Username not found')
+          }
+          signInEmail = data.email
+        }
+        const { error } = await supabase.auth.signInWithPassword({ email: signInEmail, password })
         if (error) throw error
         onAuthChange()
         onProfileChange()
@@ -94,22 +108,32 @@ export function AuthScreen({ user, profile, onAuthChange, onProfileChange }: Pro
           />
         )}
         <input
-          type="email"
-          placeholder="Email (e.g. you@uwaterloo.ca)"
+          type={mode === 'login' ? 'text' : 'email'}
+          placeholder={mode === 'login' ? 'Email or username' : 'Email (e.g. you@uwaterloo.ca)'}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          autoComplete="email"
+          autoComplete={mode === 'login' ? 'username' : 'email'}
         />
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          minLength={6}
-          autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-        />
+        <div className="auth-password-wrap">
+          <input
+            type={showPassword ? 'text' : 'password'}
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            minLength={6}
+            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+          />
+          <button
+            type="button"
+            className="auth-password-toggle"
+            onClick={() => setShowPassword((s) => !s)}
+            aria-label={showPassword ? 'Hide password' : 'Show password'}
+          >
+            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+          </button>
+        </div>
         {message && (
           <p className={message.type === 'error' ? 'auth-error' : 'auth-success'}>{message.text}</p>
         )}
