@@ -233,7 +233,7 @@
   position: relative;
   background: var(--bg-surface);
   border-radius: 1rem;
-  padding: 1.5rem;
+  padding: 2rem 1.75rem;
   max-width: 360px;
   width: 100%;
   border: 1px solid var(--border);
@@ -260,7 +260,7 @@
 }
 
 .auth-form-wrapper {
-  padding-right: 2rem;
+  padding-right: 1.5rem;
 }
 
 .auth-title {
@@ -274,6 +274,13 @@
   margin: 0 0 1rem 0;
   font-size: 0.8125rem;
   color: var(--text-muted);
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  margin-top: 0.5rem;
 }
 
 .auth-form input {
