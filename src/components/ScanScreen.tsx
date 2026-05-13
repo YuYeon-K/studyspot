@@ -18,10 +18,9 @@ interface Props {
   rooms: Room[]
   user: User | null
   onSubmitted: () => void
-  onSignInClick: () => void
 }
 
-export function ScanScreen({ rooms, user, onSubmitted, onSignInClick }: Props) {
+export function ScanScreen({ rooms, user, onSubmitted }: Props) {
   const [scanning, setScanning] = useState(false)
   const [snapshot, setSnapshot] = useState<NoiseSnapshot | null>(null)
   const [selectedRoomId, setSelectedRoomId] = useState<string>('')
@@ -30,6 +29,7 @@ export function ScanScreen({ rooms, user, onSubmitted, onSignInClick }: Props) {
   const [hasMusic, setHasMusic] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState(false)
 
   const handleScan = async () => {
     setError(null)
@@ -42,21 +42,22 @@ export function ScanScreen({ rooms, user, onSubmitted, onSignInClick }: Props) {
         setSelectedRoomId(rooms[0].id)
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Mic access denied or failed')
+      setError(e instanceof Error ? e.message : 'Couldn\'t access microphone. Check permissions and try again.')
     } finally {
       setScanning(false)
     }
   }
 
   const handleSubmit = async () => {
-    if (!selectedRoomId || !user) return
+    if (!selectedRoomId) return
     setSubmitting(true)
     setError(null)
+    setSuccess(false)
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: err } = await (supabase.from('room_status') as any).insert({
         room_id: selectedRoomId,
-        user_id: user.id,
+        user_id: user?.id ?? null,
         avg_noise: snapshot?.rms ?? null,
         noise_label: snapshot?.label ?? null,
         people_count: 0,
@@ -69,7 +70,9 @@ export function ScanScreen({ rooms, user, onSubmitted, onSignInClick }: Props) {
       setCrowdLevel('')
       setYappersCount(0)
       setHasMusic(false)
+      setSuccess(true)
       onSubmitted()
+      setTimeout(() => setSuccess(false), 3000)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to submit')
     } finally {
@@ -80,17 +83,6 @@ export function ScanScreen({ rooms, user, onSubmitted, onSignInClick }: Props) {
   const roomsList = rooms.filter((r) => (r as { spot_type?: string }).spot_type !== 'cafe')
   const cafesList = rooms.filter((r) => (r as { spot_type?: string }).spot_type === 'cafe')
   const allSpots = [...roomsList, ...cafesList]
-
-  if (!user) {
-    return (
-      <div className="auth-required">
-        <p>Sign in to report status and help others find the best places.</p>
-        <button type="button" className="submit-button" onClick={onSignInClick}>
-          Sign in to continue
-        </button>
-      </div>
-    )
-  }
 
   return (
     <div className="scan-screen">
@@ -107,7 +99,16 @@ export function ScanScreen({ rooms, user, onSubmitted, onSignInClick }: Props) {
       )}
 
       {error && (
-        <p className="scan-error">{error}</p>
+        <div className="scan-error-block">
+          <p className="scan-error">{error}</p>
+          <button type="button" className="scan-error-retry" onClick={() => setError(null)}>
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {success && (
+        <p className="scan-success">Status reported! Thanks for helping others.</p>
       )}
 
       {allSpots.length > 0 && (

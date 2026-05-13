@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { RefreshCw, MessageCircle, Music2, Trash2, ChevronRight, ArrowLeft, BarChart2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { rankScore } from '../lib/ranking'
 import { ReportStatusModal } from './ReportStatusModal'
 import type { Room } from '../types/database'
 import type { User } from '@supabase/supabase-js'
@@ -55,6 +56,8 @@ export function RoomList({ rooms, loading, onRefresh, isAdmin, canReport = false
   const [refreshing, setRefreshing] = useState(false)
   const [viewMode, setViewMode] = useState<ViewMode>('buildings')
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [statusError, setStatusError] = useState<string | null>(null)
   const [reportingPlace, setReportingPlace] = useState<RoomWithStatus | null>(null)
   const [selectedBuilding, setSelectedBuilding] = useState<string | null>(null)
   const [selectedPlace, setSelectedPlace] = useState<RoomWithStatus | null>(null)
@@ -65,18 +68,20 @@ export function RoomList({ rooms, loading, onRefresh, isAdmin, canReport = false
   }, [viewMode])
 
   useEffect(() => {
+    setStatusError(null)
     async function fetchStatus() {
       if (rooms.length === 0) {
         setRoomData(rooms.map((r) => ({ ...r, status: null })))
         return
       }
-
-      const { data } = await supabase
+      try {
+        const { data, error: err } = await supabase
         .from('room_status')
         .select('room_id, noise_label, crowd_level, yappers_count, has_music, created_at')
         .in('room_id', rooms.map((r) => r.id))
         .order('created_at', { ascending: false })
-      const statusRows = data as Array<{
+        if (err) throw err
+        const statusRows = data as Array<{
         room_id: string
         noise_label: string | null
         crowd_level: string | null
@@ -125,26 +130,13 @@ export function RoomList({ rooms, loading, onRefresh, isAdmin, canReport = false
         }
       })
 
-      const crowdOrder: Record<string, number> = {
-        empty: 0,
-        lots_of_space: 1,
-        some_space: 2,
-        crowded: 3,
-        no_space: 4,
+      summarized.sort((a, b) => rankScore(b) - rankScore(a))
+        setRoomData(summarized)
+      } catch {
+        setStatusError('Could not load latest status')
+        setRoomData(rooms.map((r) => ({ ...r, status: null })))
       }
-      summarized.sort((a, b) => {
-        const order: Record<string, number> = { Quiet: 0, Moderate: 1, Loud: 2 }
-        const va = a.status?.noiseLabel ? (order[a.status.noiseLabel] ?? 1) : 99
-        const vb = b.status?.noiseLabel ? (order[b.status.noiseLabel] ?? 1) : 99
-        if (va !== vb) return va - vb
-        const ca = a.status?.crowdLevel ? (crowdOrder[a.status.crowdLevel] ?? 99) : 99
-        const cb = b.status?.crowdLevel ? (crowdOrder[b.status.crowdLevel] ?? 99) : 99
-        return ca - cb
-      })
-
-      setRoomData(summarized)
     }
-
     fetchStatus()
   }, [rooms])
 
@@ -157,12 +149,13 @@ export function RoomList({ rooms, loading, onRefresh, isAdmin, canReport = false
   const handleDelete = async (id: string, name: string) => {
     if (!isAdmin || !confirm(`Remove "${name}"? This cannot be undone.`)) return
     setDeletingId(id)
+    setDeleteError(null)
     try {
       const { error } = await supabase.from('rooms').delete().eq('id', id)
       if (error) throw error
       await onRefresh()
-    } catch {
-      // Silently fail - admin might have lost permission
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : 'Could not delete. You may have lost admin permission.')
     } finally {
       setDeletingId(null)
     }
@@ -190,6 +183,9 @@ export function RoomList({ rooms, loading, onRefresh, isAdmin, canReport = false
     }
     const entries = [...map.entries()]
     entries.sort((a, b) => {
+      const bestA = Math.max(...a[1].map(rankScore))
+      const bestB = Math.max(...b[1].map(rankScore))
+      if (bestA !== bestB) return bestB - bestA
       const oa = BUILDING_ORDER[a[0]] ?? 99
       const ob = BUILDING_ORDER[b[0]] ?? 99
       if (oa !== ob) return oa - ob
@@ -322,13 +318,33 @@ export function RoomList({ rooms, loading, onRefresh, isAdmin, canReport = false
 
   return (
     <div>
-      {reportingPlace && user && (
+      {reportingPlace && (
         <ReportStatusModal
           place={reportingPlace}
-          user={user}
+          user={user ?? null}
           onSaved={onRefresh}
           onClose={() => setReportingPlace(null)}
         />
+      )}
+      {(statusError || deleteError) && (
+        <div className="inline-error-banner">
+          {statusError && (
+            <span>
+              {statusError}
+              <button type="button" className="inline-error-retry" onClick={() => { setStatusError(null); onRefresh(); }}>
+                Retry
+              </button>
+            </span>
+          )}
+          {deleteError && (
+            <span>
+              {deleteError}
+              <button type="button" className="inline-error-retry" onClick={() => setDeleteError(null)}>
+                Dismiss
+              </button>
+            </span>
+          )}
+        </div>
       )}
       <div className="room-list-header">
         <div className="room-list-toggle">

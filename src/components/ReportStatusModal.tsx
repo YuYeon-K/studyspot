@@ -22,7 +22,7 @@ const NOISE_OPTIONS = [
 
 interface Props {
   place: Room
-  user: User
+  user: User | null
   onSaved: () => void
   onClose: () => void
 }
@@ -43,7 +43,7 @@ export function ReportStatusModal({ place, user, onSaved, onClose }: Props) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: err } = await (supabase.from('room_status') as any).insert({
         room_id: place.id,
-        user_id: user.id,
+        user_id: user?.id ?? null,
         avg_noise: null,
         noise_label: noiseLabel || null,
         people_count: 0,
@@ -55,7 +55,7 @@ export function ReportStatusModal({ place, user, onSaved, onClose }: Props) {
       onSaved()
       onClose()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to submit')
+      setError(e instanceof Error ? e.message : 'Failed to submit. Check your connection and try again.')
     } finally {
       setLoading(false)
     }

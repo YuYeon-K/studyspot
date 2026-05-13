@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Home, Map, Mic, PlusCircle, LogIn } from 'lucide-react'
+import { Home, Map, Mic, PlusCircle, LogIn, Award } from 'lucide-react'
 import { RoomList } from './components/RoomList'
+import { RankingsScreen } from './components/RankingsScreen'
 import { PlacesMap } from './components/PlacesMap'
 import { ScanScreen } from './components/ScanScreen'
 import { AddRoomForm } from './components/AddRoomForm'
@@ -10,7 +11,7 @@ import type { Room } from './types/database'
 import type { User } from '@supabase/supabase-js'
 import './App.css'
 
-type Tab = 'places' | 'map' | 'scan' | 'add'
+type Tab = 'places' | 'rankings' | 'map' | 'scan' | 'add'
 
 const UW_LOCATIONS = ['DC', 'MC', 'SLC', 'DP', 'E7', 'E5', 'E3', 'HH', 'QNC', 'RCH', 'Plaza', 'Other'] as const
 
@@ -22,7 +23,7 @@ function App() {
   const [profile, setProfile] = useState<{ username: string; is_admin?: boolean } | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [showAuth, setShowAuth] = useState(false)
-  const [tab, setTab] = useState<Tab>('places')
+  const [tab, setTab] = useState<Tab>('rankings')
   const [rooms, setRooms] = useState<Room[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -40,7 +41,9 @@ function App() {
       if (u) fetchProfile(u.id)
       setAuthLoading(false)
     })
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_e, session) => {
       const u = session?.user ?? null
       setUser(u)
       if (u) fetchProfile(u.id)
@@ -99,12 +102,7 @@ function App() {
               onProfileChange={() => user && fetchProfile(user.id)}
             />
           ) : !authLoading ? (
-            <button
-              type="button"
-              className="auth-trigger"
-              onClick={() => setShowAuth(true)}
-              aria-label="Sign in"
-            >
+            <button type="button" className="auth-trigger" onClick={() => setShowAuth(true)} aria-label="Sign in">
               <LogIn size={20} />
               <span>Sign in</span>
             </button>
@@ -129,35 +127,23 @@ function App() {
       )}
 
       <nav className="nav-tabs">
-        <button
-          className={tab === 'places' ? 'active' : ''}
-          onClick={() => setTab('places')}
-          aria-label="Places"
-        >
+        <button className={tab === 'places' ? 'active' : ''} onClick={() => setTab('places')} aria-label="Places">
           <Home size={22} />
           <span>Places</span>
         </button>
-        <button
-          className={tab === 'map' ? 'active' : ''}
-          onClick={() => setTab('map')}
-          aria-label="Map"
-        >
+        <button className={tab === 'rankings' ? 'active' : ''} onClick={() => setTab('rankings')} aria-label="Rankings">
+          <Award size={22} />
+          <span>Rankings</span>
+        </button>
+        <button className={tab === 'map' ? 'active' : ''} onClick={() => setTab('map')} aria-label="Map">
           <Map size={22} />
           <span>Map</span>
         </button>
-        <button
-          className={tab === 'scan' ? 'active' : ''}
-          onClick={() => setTab('scan')}
-          aria-label="Scan"
-        >
+        <button className={tab === 'scan' ? 'active' : ''} onClick={() => setTab('scan')} aria-label="Scan">
           <Mic size={22} />
           <span>Scan</span>
         </button>
-        <button
-          className={tab === 'add' ? 'active' : ''}
-          onClick={() => setTab('add')}
-          aria-label="Add place"
-        >
+        <button className={tab === 'add' ? 'active' : ''} onClick={() => setTab('add')} aria-label="Add place">
           <PlusCircle size={22} />
           <span>Add</span>
         </button>
@@ -165,7 +151,12 @@ function App() {
 
       {error && (
         <div className="app-error-banner">
-          {error}
+          <div className="app-error-content">
+            <span>{error}</span>
+            <button type="button" className="app-error-retry" onClick={() => { setError(null); setLoading(true); fetchRooms(); }}>
+              Retry
+            </button>
+          </div>
           {(error.toLowerCase().includes('fetch') || error.includes('Invalid') || !import.meta.env.VITE_SUPABASE_URL) ? (
             <p style={{ margin: '0.5rem 0 0 0', opacity: 0.9 }}>
               Add a <code>.env</code> file with <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> from your Supabase project.
@@ -180,26 +171,19 @@ function App() {
           loading={loading}
           onRefresh={fetchRooms}
           isAdmin={profile?.is_admin ?? false}
-          canReport={!!user}
+          canReport={true}
           user={user}
         />
+      )}
+      {tab === 'rankings' && (
+        <RankingsScreen rooms={rooms} loading={loading} onRefresh={fetchRooms} canReport={true} user={user} />
       )}
       {tab === 'map' && <PlacesMap places={rooms} />}
       {tab === 'scan' && (
-        <ScanScreen
-          rooms={rooms}
-          user={user}
-          onSubmitted={fetchRooms}
-          onSignInClick={() => setShowAuth(true)}
-        />
+        <ScanScreen rooms={rooms} user={user} onSubmitted={fetchRooms} />
       )}
       {tab === 'add' && (
-        <AddRoomForm
-          user={user}
-          locations={UW_LOCATIONS}
-          onAdded={fetchRooms}
-          onSignInClick={() => setShowAuth(true)}
-        />
+        <AddRoomForm locations={UW_LOCATIONS} onAdded={fetchRooms} />
       )}
     </div>
   )

@@ -1,15 +1,12 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
-import type { User } from '@supabase/supabase-js'
 
 interface Props {
-  user: User | null
   locations: readonly string[]
   onAdded: () => void
-  onSignInClick: () => void
 }
 
-export function AddRoomForm({ user, locations, onAdded, onSignInClick }: Props) {
+export function AddRoomForm({ locations, onAdded }: Props) {
   const [spotType, setSpotType] = useState<'building' | 'cafe'>('building')
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -17,27 +14,17 @@ export function AddRoomForm({ user, locations, onAdded, onSignInClick }: Props) 
   const [latitude, setLatitude] = useState('')
   const [longitude, setLongitude] = useState('')
   const [loading, setLoading] = useState(false)
-
-  if (!user) {
-    return (
-      <div className="auth-required">
-        <p>Sign in to add places to the UWaterloo study map.</p>
-        <button type="button" className="add-place-button" onClick={onSignInClick}>
-          Sign in to continue
-        </button>
-      </div>
-    )
-  }
+  const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim()) return
     setLoading(true)
+    setError(null)
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const lat = latitude ? parseFloat(latitude) : null
       const lng = longitude ? parseFloat(longitude) : null
-      await (supabase.from('rooms') as any).insert({
+      const { error: err } = await (supabase.from('rooms') as any).insert({
         name: name.trim(),
         description: description.trim(),
         building: location || (spotType === 'cafe' ? 'Plaza' : ''),
@@ -45,12 +32,15 @@ export function AddRoomForm({ user, locations, onAdded, onSignInClick }: Props) 
         latitude: Number.isFinite(lat) ? lat : null,
         longitude: Number.isFinite(lng) ? lng : null,
       })
+      if (err) throw new Error(err.message)
       setName('')
       setDescription('')
       setLocation('')
       setLatitude('')
       setLongitude('')
       onAdded()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to add place. Check your connection and try again.')
     } finally {
       setLoading(false)
     }
@@ -120,6 +110,14 @@ export function AddRoomForm({ user, locations, onAdded, onSignInClick }: Props) 
           onChange={(e) => setLongitude(e.target.value)}
         />
       </div>
+      {error && (
+        <div className="form-error-block">
+          <p className="auth-error">{error}</p>
+          <button type="button" className="form-error-retry" onClick={() => setError(null)}>
+            Dismiss
+          </button>
+        </div>
+      )}
       <button type="submit" className="add-place-button" disabled={loading}>
         {loading ? 'Adding…' : spotType === 'cafe' ? 'Add Cafe' : 'Add Place'}
       </button>

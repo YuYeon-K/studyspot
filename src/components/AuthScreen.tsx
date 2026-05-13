@@ -40,11 +40,10 @@ export function AuthScreen({ user, profile, onAuthChange, onProfileChange }: Pro
             .from('profiles')
             .select('email')
             .eq('username', signInEmail)
-            .maybeSingle() as { data: { email: string } | null }
-          if (!data?.email) {
-            throw new Error('Username not found')
-          }
-          signInEmail = data.email
+            .maybeSingle()
+          const row = data as { email: string } | null
+          if (!row?.email) throw new Error('Username not found')
+          signInEmail = row.email
         }
         const { error } = await supabase.auth.signInWithPassword({ email: signInEmail, password })
         if (error) throw error

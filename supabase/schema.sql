@@ -119,15 +119,17 @@ create policy "Authenticated can insert room_status" on public.room_status for i
 
 -- Seed UWaterloo buildings + plaza cafes (lat/lng approx campus center)
 insert into public.rooms (name, description, building, spot_type, latitude, longitude) values
+  ('DC Library', 'Davis Centre library — quiet study area', 'DC', 'room', 43.4723, -80.5408),
   ('DC 1301', 'Davis Centre study area', 'DC', 'room', 43.4709, -80.5415),
   ('DC 1351', 'Davis Centre collaboration space', 'DC', 'room', 43.4709, -80.5415),
+  ('MC 2030', 'Math building room 2030', 'MC', 'room', 43.4728, -80.5449),
   ('MC 4th Floor', 'Math building quiet zone', 'MC', 'room', 43.4728, -80.5449),
   ('SLC Great Hall', 'Student Life Centre main area', 'SLC', 'room', 43.4715, -80.5450),
   ('SLC 3rd Floor', 'Quieter study spots', 'SLC', 'room', 43.4715, -80.5450),
   ('Dana Porter 4th', 'Porter library silent floor', 'DP', 'room', 43.4698, -80.5425),
   ('Dana Porter 2nd', 'Porter library group area', 'DP', 'room', 43.4698, -80.5425),
   ('E7 2nd Floor', 'Engineering lounge', 'E7', 'room', 43.4720, -80.5435),
-  ('Williams Fresh Cafe', 'Coffee, snacks, study vibes', 'Plaza', 'cafe', 43.4713, -80.5448),
+  ('Williams Cafe', 'Coffee, snacks, study vibes', 'Plaza', 'cafe', 43.4713, -80.5448),
   ('Now Tea', 'Bubble tea and study spot', 'Plaza', 'cafe', 43.4712, -80.5449),
   ('Tsujiri', 'Japanese-inspired cafe', 'Plaza', 'cafe', 43.4714, -80.5451),
   ('Gong Cha', 'Bubble tea, plaza', 'Plaza', 'cafe', 43.4711, -80.5447);
